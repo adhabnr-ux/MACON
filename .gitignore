@@ -3,3 +3,7 @@ macon.config.json
 .env
 *.log
 .DS_Store
+relay/secrets.json
+relay/.dev.vars
+.wrangler/
+mac/agent.conf

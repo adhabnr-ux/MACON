@@ -7,6 +7,10 @@ import { hashPin } from '../src/auth.js';
 import { normalizeMac } from '../src/magic.js';
 import { createServer } from '../src/server.js';
 import { createWaker } from '../src/wake.js';
+import { pinDigest } from '../relay/core.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isAwake } from '../src/probe.js';
 
 const [cmd = 'help', ...rest] = argv.slice(2);
@@ -16,6 +20,8 @@ const HELP = `macon - wake my Mac from my phone
 
   macon init [--mac=aa:bb:cc:dd:ee:ff] [--ip=192.168.1.20] [--name="My Mac"] [--pin=123456 | --random-pin] [--trust-proxy]
   macon start        run the web server
+  macon relay-init [--pin=… | --random-pin] [--name="My Mac"] [--ttl=1200] [--force]
+                     create secrets for the cloud relay (no always-on device needed)
   macon doctor       check config, network and (optionally) the Mac
   macon wake         send a wake right now from this machine (no phone needed) and wait for the Mac
   macon help
@@ -54,6 +60,37 @@ async function init() {
   } finally {
     rl.close();
   }
+}
+
+
+const RELAY_SECRETS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'relay', 'secrets.json');
+
+async function relayInit() {
+  if (fs.existsSync(RELAY_SECRETS) && !flags.force) {
+    throw new Error(`${RELAY_SECRETS} already exists. Re-running would sign out your phone and orphan the Mac agent. Use --force to replace it.`);
+  }
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'; // no look-alike characters
+  let pin = flags.pin;
+  let shown = false;
+  if (!pin) {
+    pin = Array.from(crypto.randomBytes(10), (b) => alphabet[b % alphabet.length]).join('');
+    shown = true;
+  }
+  // The relay is a public URL, so require a PIN that online guessing cannot realistically hit.
+  if (pin.length < 8) throw new Error('For the cloud relay the PIN must be at least 8 characters.');
+  const rand = (n) => crypto.randomBytes(n).toString('base64url');
+  const secrets = { NAME: flags.name || 'My Mac', PIN_KEY: rand(32), SESSION_SECRET: rand(48), AGENT_TOKEN: rand(48), WAKE_TTL_SEC: String(flags.ttl || 1200) };
+  secrets.PIN_HMAC = await pinDigest(secrets.PIN_KEY, pin);
+  fs.writeFileSync(RELAY_SECRETS, JSON.stringify(secrets, null, 2) + '\n', { mode: 0o600 });
+  fs.chmodSync(RELAY_SECRETS, 0o600);
+  console.log(`Saved ${RELAY_SECRETS} (chmod 600, git-ignored).`);
+  if (shown) console.log(`Your PIN is: ${pin}   (write it down; it is stored only as a keyed hash)`);
+  console.log(`
+Next:
+  1. cd relay && npx wrangler@4 login && npx wrangler@4 deploy
+  2. npx wrangler@4 secret bulk secrets.json
+  3. On the Mac:  sudo ./mac/install-agent.sh --url=https://<the URL wrangler printed>
+  4. On your phone: open that URL in Safari > Share > Add to Home Screen`);
 }
 
 async function start() {
@@ -99,6 +136,6 @@ async function wakeNow() {
   exit(r.state === 'awake' || r.state === 'sent' ? 0 : 1);
 }
 
-const commands = { init, start, doctor, wake: wakeNow };
+const commands = { init, start, doctor, wake: wakeNow, 'relay-init': relayInit };
 if (!commands[cmd]) { console.log(HELP); exit(cmd === 'help' ? 0 : 1); }
 commands[cmd]().catch((e) => { console.error(`Error: ${e.message}`); exit(1); });

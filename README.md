@@ -4,16 +4,16 @@ A tiny private web app (installable PWA). Open it on your phone, enter your PIN 
 leaves sleep and shows its normal lock screen, where **you type your password**. macOS never lets anything
 bypass that, and this app doesn't try to.
 
-* Zero dependencies (Node ≥ 20) and 33 automated tests.
+* Zero runtime dependencies and a full automated test suite.
 * Hardened: scrypt-hashed PIN, signed HttpOnly session cookie, CSRF header, rate-limited login, strict CSP.
 * **Single target:** the server only ever wakes the one MAC in its config. No request can name another host.
 * Live status (asleep / waking / awake) with confirmation that the Mac is really up.
 
-## Why it needs a small always-on helper (read this first)
+## Option A: a small always-on helper on your network (instant wake)
 
 A sleeping Mac cannot host a website, and a website on the internet cannot reach into your home network.
-Waking a Mac uses a **Wake-on-LAN magic packet**, which must be sent *from inside your home network*.
-So the setup has three pieces:
+Waking a Mac instantly uses a **Wake-on-LAN magic packet**, which must be sent *from inside your home network*.
+So this option has three pieces:
 
 ```
  iPhone (PWA) ──private Tailscale link──▶ macon server ──magic packet (LAN)──▶ your Mac wakes
@@ -26,7 +26,46 @@ adds HTTPS, so "Add to Home Screen" behaves like a real app. Nothing is exposed 
 
 > The always-on device must be on the same network (same subnet/VLAN) as the Mac. Anything that runs Node or Docker works.
 
-## Setup (about 10 minutes)
+## Option B: no always-on device (periodic polling)
+
+If you don't want a helper box, the Mac can do the "listening" itself in short bursts:
+
+```
+ iPhone (PWA) ──HTTPS──▶ relay (free Cloudflare Worker) ◀──HTTPS poll── Mac agent (wakes itself on a timer)
+```
+
+1. You tap **Wake**. The relay just records "wake requested" (it never reaches into your home).
+2. A small **agent on the Mac** keeps a rolling chain of scheduled wake-ups (`pmset schedule wake`), every 5 min on power / 15 min on battery. Each one lasts a few seconds: the agent asks the relay "was Wake pressed?".
+3. If yes, it lights the screen and holds it on for 5 minutes, so you land on the normal lock screen and type your password. If not, it puts the Mac straight back to sleep when nobody is using it.
+
+**Honest limits**
+* **Delay:** worst case equals the interval (default 5 min; the app shows "expected by 8:38 PM"). Lower it with `--interval=120` at the cost of more wake-ups.
+* The Mac must be **asleep, not shut down**, and the agent installed. Keep a laptop on power for best results.
+* Battery cost is small (a few seconds of dark wake per interval) but real; use `--quiet=23:00-07:00` to skip the night.
+* The relay is a **public URL** protected by an 8+ character PIN, a keyed hash, persistent lockouts and a CSRF header. For stronger protection, put Cloudflare Access in front of it.
+* Requests expire after 20 min, so a Mac that comes back online hours later never lights up by surprise.
+* I could not test the macOS power behavior from the cloud sandbox. Everything else (relay, agent logic, the PWA) is tested end to end; verify the Mac part with `sudo /usr/local/libexec/macon-agent doctor` (see below).
+
+**Setup (about 10 minutes, one time)**
+```bash
+git clone https://github.com/adhabnr-ux/MACON && cd MACON
+node bin/macon.js relay-init --name="My Mac"            # prints your PIN once, writes relay/secrets.json (git-ignored)
+cd relay && npx wrangler@4 login && npx wrangler@4 deploy   # prints https://macon-relay.<you>.workers.dev
+npx wrangler@4 secret bulk secrets.json && cd ..
+sudo ./mac/install-agent.sh --url=https://macon-relay.<you>.workers.dev
+```
+(Needs Node ≥ 20 for the deploy step only: `brew install node`. A free Cloudflare account is enough.)
+Then open the URL in Safari on your phone → PIN → Share → **Add to Home Screen**.
+
+**Verify on your Mac**
+1. Tap Wake with the Mac awake: the screen should light within ~15 s.
+2. Sleep the Mac, wait a minute, tap Wake: it should wake within one interval.
+3. `sudo /usr/local/libexec/macon-agent doctor` shows the relay link, your scheduled wake events and recent wakes. `DarkWake ... due to RTC` means silent check-ins; plain `Wake` means the screen may flash on each check-in. If so, raise the interval or set quiet hours.
+4. Logs: `tail -f /var/log/macon-agent.log`. Settings: `/usr/local/etc/macon-agent.conf` (restart with `sudo launchctl kickstart -k system/com.macon.agent`). Remove everything: `sudo ./mac/uninstall-agent.sh`.
+
+Both options can coexist; the app detects which mode it is talking to.
+
+## Option A setup: always-on helper on your network (about 10 minutes)
 
 ### 1. On the Mac
 ```bash
@@ -101,6 +140,6 @@ Environment overrides: `MACON_CONFIG`, `MACON_MAC`, `MACON_MAC_IP`, `MACON_PORT`
 
 ## Development
 ```bash
-npm test         # packet format, wake orchestration over real UDP, auth, CSRF, rate limiting, path traversal...
+npm test         # relay, Mac agent (real curl + stubbed pmset), packet format, wake orchestration over real UDP, auth, CSRF, rate limiting, path traversal...
 npm run icons    # regenerate the PNG icons (dependency-free)
 ```
