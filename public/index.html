@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wake Mac</title>
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="color-scheme" content="dark light">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Wake Mac">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main id="app" data-view="loading">
+    <header>
+      <h1 id="name">Mac</h1>
+      <p id="subtitle" class="muted">&nbsp;</p>
+    </header>
+
+    <section id="login" hidden>
+      <form id="login-form" autocomplete="off">
+        <label for="pin">Enter your PIN</label>
+        <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" enterkeyhint="go" required>
+        <button type="submit" class="secondary">Unlock</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="control" hidden>
+      <button id="wake" type="button" aria-live="polite" data-state="asleep">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v10M6.3 5.6a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span id="wake-label">Wake</span>
+      </button>
+      <p id="status" class="status" role="status"></p>
+      <p id="hint" class="muted"></p>
+      <button id="logout" type="button" class="link">Lock this phone</button>
+    </section>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

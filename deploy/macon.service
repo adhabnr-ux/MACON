@@ -1,0 +1,25 @@
+# Install on the always-on LAN device (Raspberry Pi, NAS, mini PC):
+#   sudo cp deploy/macon.service /etc/systemd/system/ && sudo systemctl enable --now macon
+# Edit User= and the paths first.
+[Unit]
+Description=macon - wake my Mac from my phone
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/MACON
+ExecStart=/usr/bin/node bin/macon.js start
+Restart=always
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

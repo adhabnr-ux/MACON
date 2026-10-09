@@ -1,0 +1,8 @@
+# Wake-on-LAN needs LAN broadcast, so the container MUST use host networking (Linux hosts only).
+services:
+  macon:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data:ro      # put macon.config.json here (created by `node bin/macon.js init`)

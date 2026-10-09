@@ -1,0 +1,17 @@
+{
+  "name": "macon",
+  "version": "1.0.0",
+  "description": "A private, installable web app (PWA) with one button: wake my Mac.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "bin": { "macon": "bin/macon.js" },
+  "scripts": {
+    "start": "node bin/macon.js start",
+    "init": "node bin/macon.js init",
+    "doctor": "node bin/macon.js doctor",
+    "test": "node --test \"test/*.test.js\"",
+    "icons": "node scripts/make-icons.js"
+  }
+}
